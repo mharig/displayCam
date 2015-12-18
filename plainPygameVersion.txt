@@ -1,0 +1,20 @@
+
+Getting images from a camera just using Pygame:
+
+>>> import pygame
+>>> import pygame.camera as camera
+>>> pygame.init()
+(6, 0)
+>>> camera.init()
+>>> cams = camera.list_cameras()
+>>> cams
+['/dev/video0']
+>>> cam = camera.Camera('/dev/video0', (1024, 768))
+>>> cam.start()
+>>> siz = (1024, 768)
+>>> display = pygame.display.set_mode(siz, 0)
+>>> snapshot = pygame.surface.Surface(siz, 0, display)
+>>> snapshot = cam.get_image(snapshot)     # use if cam.query_image(): ....
+>>> display.blit(snapshot, (0,0))
+<rect(0, 0, 1024, 768)>
+>>> pygame.display.flip()

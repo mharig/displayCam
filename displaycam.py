@@ -1,6 +1,9 @@
 # Captures and displays video images
 
 
+###################################################################
+# TODO: use the pygame.camera module instead of VideoCapture!!!!!!!
+###################################################################
 
 import pygame
 from VideoCapture import Device
@@ -13,7 +16,7 @@ def initCam(_devnum=0, _res=(640, 480)):
 
     if cam is None:
         raise Exception('Cannot connect to camera. Maybe in use by other program?')
-    
+
     try:
         cam.setResolution(*_res)
     except Exception:
@@ -28,7 +31,7 @@ def initCam(_devnum=0, _res=(640, 480)):
 
 def initPygame(_windowSize=(640, 480)):
     pygame.init()
-    screen = pygame.display.set_mode(_windowSize) 
+    screen = pygame.display.set_mode(_windowSize)
     clock = pygame.time.Clock()
     return screen, clock
 
@@ -45,7 +48,7 @@ def loop(_cam, _fps, _screen, _clock):
             elif event.type == pygame.MOUSEBUTTONUP:    # mouse click
                 snapName = 'snapshot_' + str(imgTicker) + '.png'
                 _cam.saveSnapshot(snapName)
-                print 'Save snapshot as', snapName
+                print 'Saved snapshot as', snapName
                 imgTicker += 1
 
         img = _cam.getBuffer()  # returns tuple (raw data string, width, height). undocumented.
