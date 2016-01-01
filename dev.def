@@ -1,0 +1,18 @@
+[
+    {
+        "name": "Winmax USB Microscope DigiMicro Profi",
+        "idVendor": "0c45",
+        "idProduct": "6353",
+        "vidRes": [[2592,1944], [2048,1536], [1600,1200], [1280,960]],
+        "stillRes": [[2592,1944], [2048,1536], [1600,1200], [1280,960]],
+        "colors": [24],
+        "vidFormats": ["avi"],
+        "stillFormats": ["jpg"],
+        "uvc": "UVC 1.00"
+    },
+    {
+        "name": "Laptop_Integrated_Webcam_2M",
+        "idVendor": "0c45",
+        "idProduct": "6421"
+    }
+]

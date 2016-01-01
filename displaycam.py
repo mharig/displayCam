@@ -3,8 +3,11 @@ from __future__ import print_function
 
 ###################################################################
 # TODO:
-#       - use max framerate instead of configured one (remove clock)!
+#       - display unscaled (with offsets), move offsets with mouse drag & arrow keys
 #       - make ESC & CTRL-C exit the program
+#       - make possible to use different video & screenshot resolutions
+#           (screenshot always in max cam resolution?)
+#           current behaviour: screenshot res = vid res
 ###################################################################
 
 import os.path as op
@@ -20,7 +23,7 @@ def printVideoDevices():
 
 
 def initCam(_camera='/dev/video0', _res=(640, 480)):
-    '''Wants the index of the wanted cam. Returns the device object and the resolution (w,h)'''
+    '''Wants the name of the wanted camera device. Returns the device object and the resolution (w,h)'''
 
     camera.init()
     cam = camera.Camera(_camera, _res)
@@ -74,7 +77,6 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
             _screen.blit(_snapshot, (0,0))
             pygame.display.flip()
 
-        _clock.tick(_fps)
 
 
 
