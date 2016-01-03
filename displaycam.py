@@ -10,11 +10,30 @@ from __future__ import print_function
 #           current behaviour: screenshot res = vid res
 ###################################################################
 
+
+__author__ = 'Michael Harig <floss@michaelharig.de>'
+__version__ = '0.1'
+__license__ = '''GPL v3'''
+
+
 import os.path as op
+import argparse
 
 import pygame
 import pygame.camera as camera
 
+# define the mouse "buttons"
+(   LEFT,
+    MIDDLE,
+    RIGHT,
+    WHEEL_UP,
+    WHEEL_DOWN) = range(1,6)
+
+# current offset of the images
+XOFFSET = 0
+YOFFSET = 0
+
+SCALE = False
 
 def printVideoDevices():
     '''Prints a list of available video devices'''
@@ -53,79 +72,88 @@ def initPygame(_windowSize=(640, 480)):
 
 
 def loop(_cam, _fps, _screen, _snapshot, _clock):
+    global XOFFSET, YOFFSET
     done = False
     imgTicker = 1
+    dragging = False
     while not done:
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 done = True
-            elif event.type == pygame.MOUSEBUTTONUP:    # mouse click
-                img = _cam.get_image()     # use if cam.query_image(): ....
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    done = True
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == RIGHT:    # right mouse button click
+                    img = _cam.get_image()     # use if cam.query_image(): ....
 
-                snapName = 'snapshot_' + str(imgTicker) + '.png'
-                while op.exists(snapName):
-                    imgTicker += 1
                     snapName = 'snapshot_' + str(imgTicker) + '.png'
-                pygame.image.save(img, snapName)
-                print('Saved snapshot as', snapName)
-                imgTicker += 1
-
+                    while op.exists(snapName):
+                        imgTicker += 1
+                        snapName = 'snapshot_' + str(imgTicker) + '.png'
+                    pygame.image.save(img, snapName)
+                    print('Saved snapshot as', snapName)
+                    imgTicker += 1
+                elif dragging and event.button == LEFT:
+                    dragging = False
+                    #XOFFSET = 0
+                    #YOFFSET = 0
+            elif not SCALE and not dragging and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
+                dragging = True
+                pygame.mouse.get_rel()  # init the relative mouse movement
+            elif not SCALE and dragging and event.type == pygame.MOUSEMOTION:
+                xr, yr = pygame.mouse.get_rel()
+                XOFFSET += xr
+                YOFFSET += yr
         if _cam.query_image():
             img = _cam.get_image()
-            _snapshot = pygame.transform.scale(img, (_screen.get_width(), _screen.get_height()))
-            _screen.blit(_snapshot, (0,0))
+            if SCALE:
+                _snapshot = pygame.transform.scale(img, (_screen.get_width(), _screen.get_height()))
+                _screen.blit(_snapshot, (0, 0))
+            else:
+                _screen.blit(img, (XOFFSET,YOFFSET))
             pygame.display.flip()
 
 
+def makeParser():
+    argparser = argparse.ArgumentParser(description='Display cam video with pygame (>= 1.92)')
+    argparser.add_argument('-l', '--list', action='store_true', help='Print avaiable video devices')
+    argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
+    argparser.add_argument('device', nargs = '?', default='/dev/video0', help='Name of the camera device')
+    argparser.add_argument('width', nargs = '?', type=int, default=640, help='Width of view')
+    argparser.add_argument('height', nargs = '?', type=int, default=480, help='Height of view')
+
+    return argparser
 
 
-def usage():
-    print('''usage: displaycam [-h] [-l] [camera device] [width] [height]
-    -h              prints this message and exits
-    -l              lists avaiable device names and exits
-    camera device   name of the wanted cam
-    width           video resolution width
-    height          video resolution height
-    If you provide the video width you must provide the height, too.
-    Setting the video resolution may not work.''')
+def main(_args):
+    global SCALE
+    argparser = makeParser()
+    args = argparser.parse_args(_args)
 
+    if args.list:
+        printVideoDevices()
+        exit()
 
-if __name__ == '__main__':
-    import sys
+    if args.scale:
+        SCALE = True
 
-    W = None
-    H = None
-
-    if len(sys.argv) > 1:
-        if sys.argv[1] == '-h':
-            usage()
-            exit()
-        if sys.argv[1] == '-l':
-            printVideoDevices()
-            exit()
-        if len(sys.argv) == 4:
-            W = int(sys.argv[2])
-            H = int(sys.argv[3])
-        elif len(sys.argv) != 2:
-            usage()
-            exit()
-
-        if W:
-            cam = initCam(sys.argv[1], (W, H))
-        else:
-            cam = initCam(sys.argv[1])
-            W = 640
-            H = 480
-    else:
-        cam = initCam()
-        W = 640
-        H = 480
+    cam = initCam(args.device, (args.width, args.height))
 
     fps = 30
 
     screen, snapshot, clock = initPygame(cam.get_size())
+    print('Using camera', args.device)
     print('Using camera resolution', cam.get_size())
-    print('Using display size (%d, %d)'%(screen.get_width(), screen.get_height()))
+    print('Using screen size (%d, %d)'%(screen.get_width(), screen.get_height()))
+    if SCALE:
+        print('Scaling video to screen size')
     loop(cam, fps, screen, snapshot, clock)
     pygame.quit()
+
+
+
+if __name__ == '__main__':
+    import sys
+    main(sys.argv[1:])
