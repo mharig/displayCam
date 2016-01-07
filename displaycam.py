@@ -3,8 +3,8 @@ from __future__ import print_function
 
 ###################################################################
 # TODO:
-#       - display unscaled (with offsets), move offsets with mouse drag & arrow keys
-#       - make ESC & CTRL-C exit the program
+#       - display unscaled (with offsets), move offsets with arrow keys
+#       - make CTRL-C exit the program
 #       - make possible to use different video & screenshot resolutions
 #           (screenshot always in max cam resolution?)
 #           current behaviour: screenshot res = vid res
@@ -18,9 +18,11 @@ __license__ = '''GPL v3'''
 
 import os.path as op
 import argparse
+import sys
 
 import pygame
 import pygame.camera as camera
+from pygame.locals import HWSURFACE,DOUBLEBUF,RESIZABLE
 
 # define the mouse "buttons"
 (   LEFT,
@@ -34,6 +36,7 @@ XOFFSET = 0
 YOFFSET = 0
 
 SCALE = False
+
 
 def printVideoDevices():
     '''Prints a list of available video devices'''
@@ -55,7 +58,6 @@ def initCam(_camera='/dev/video0', _res=(640, 480)):
     return cam
 
 
-
 def initPygame(_windowSize=(640, 480)):
     pygame.init()
 
@@ -64,11 +66,10 @@ def initPygame(_windowSize=(640, 480)):
     w = min(vidinfo.current_w, _windowSize[0])
     h = min(vidinfo.current_h, _windowSize[1])
 
-    screen = pygame.display.set_mode((w, h), 0)
+    screen = pygame.display.set_mode((w, h), HWSURFACE|DOUBLEBUF|RESIZABLE)
     snapshot = pygame.surface.Surface((w, h), 0, screen)
     clock = pygame.time.Clock()
     return screen, snapshot, clock
-
 
 
 def loop(_cam, _fps, _screen, _snapshot, _clock):
@@ -77,7 +78,7 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
     imgTicker = 1
     dragging = False
     while not done:
-
+        ### event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 done = True
@@ -86,7 +87,7 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
                     done = True
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == RIGHT:    # right mouse button click
-                    img = _cam.get_image()     # use if cam.query_image(): ....
+                    img = _cam.get_image()
 
                     snapName = 'snapshot_' + str(imgTicker) + '.png'
                     while op.exists(snapName):
@@ -106,14 +107,22 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
                 xr, yr = pygame.mouse.get_rel()
                 XOFFSET += xr
                 YOFFSET += yr
+            elif event.type==pygame.VIDEORESIZE:
+                _screen=pygame.display.set_mode(event.dict['size'],HWSURFACE|DOUBLEBUF|RESIZABLE)
+
+        ### video diplay
         if _cam.query_image():
             img = _cam.get_image()
+
             if SCALE:
                 _snapshot = pygame.transform.scale(img, (_screen.get_width(), _screen.get_height()))
-                _screen.blit(_snapshot, (0, 0))
+                uRect = _screen.blit(_snapshot, (0, 0))
             else:
-                _screen.blit(img, (XOFFSET,YOFFSET))
-            pygame.display.flip()
+                uRect = _screen.blit(img, (XOFFSET,YOFFSET))
+            pygame.display.update(uRect)
+
+    pygame.quit()
+    sys.exit()
 
 
 def makeParser():
@@ -146,7 +155,7 @@ def main(_args):
     screen, snapshot, clock = initPygame(cam.get_size())
     print('Using camera', args.device)
     print('Using camera resolution', cam.get_size())
-    print('Using screen size (%d, %d)'%(screen.get_width(), screen.get_height()))
+    print('Using initial screen size (%d, %d)'%(screen.get_width(), screen.get_height()))
     if SCALE:
         print('Scaling video to screen size')
     loop(cam, fps, screen, snapshot, clock)
@@ -155,5 +164,4 @@ def main(_args):
 
 
 if __name__ == '__main__':
-    import sys
     main(sys.argv[1:])
