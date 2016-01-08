@@ -158,6 +158,9 @@ def main(_args):
     print('Using initial screen size (%d, %d)'%(screen.get_width(), screen.get_height()))
     if SCALE:
         print('Scaling video to screen size')
+
+    pygame.display.set_caption(args.device)
+
     loop(cam, fps, screen, snapshot, clock)
     pygame.quit()
 
