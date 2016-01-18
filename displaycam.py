@@ -3,7 +3,9 @@ from __future__ import print_function
 
 ###################################################################
 # TODO:
-#       - display unscaled (with offsets), move offsets with arrow keys
+#       - split screen to display last/loaded still image side by side with video
+#       - distance measuring tool
+#       - move offsets with arrow keys
 #       - make CTRL-C exit the program
 #       - make possible to use different video & screenshot resolutions
 #           (screenshot always in max cam resolution?)
