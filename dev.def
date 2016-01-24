@@ -13,6 +13,7 @@
     {
         "name": "Laptop_Integrated_Webcam_2M",
         "idVendor": "0c45",
-        "idProduct": "6421"
+        "idProduct": "6421",
+	    "vidRes": [[1600, 1200], [1280, 1024], [1024, 768] [800, 600], [640, 480], [320, 240], [176, 144]]
     }
 ]
