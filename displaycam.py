@@ -6,6 +6,7 @@ from __future__ import print_function
 #       - flags for vertical mirror, horizontal mirror
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool       IN PROGRESS
+#       - for the distance measuring tool: text input & output
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
 #           (screenshot always in max cam resolution?)
@@ -22,6 +23,7 @@ import os.path as op
 import argparse
 import sys
 import math
+from collections import namedtuple
 
 import pygame
 import pygame.camera as camera
@@ -52,6 +54,11 @@ WORLDSCALE = 1.0
 # just make args.device global
 DEVICE = ''
 
+
+# objects that are drawn to foreground, like lines and text
+PGObject = namedtuple('PGobject', ('drawFunction', 'parameters'))
+
+
 def printVideoDevices():
     '''Prints a list of available video devices'''
     camera.init()
@@ -81,19 +88,28 @@ def initPygame(_windowSize=(640, 480)):
     h = min(vidinfo.current_h, _windowSize[1])
 
     screen = pygame.display.set_mode((w, h), HWSURFACE|DOUBLEBUF|RESIZABLE)
-    snapshot = pygame.surface.Surface((w, h), 0, screen)
     clock = pygame.time.Clock()
-    return screen, snapshot, clock
+    return screen, clock
 
 
-def loop(_cam, _fps, _screen, _snapshot, _clock):
+def loop(_cam, _fps, _screen, _clock):
     global XOFFSET, YOFFSET, DRAW, CTRL, WORLDSCALE
     done = False
     imgTicker = 1
     dragging = False
+
+    # video image
+    snapshot = pygame.surface.Surface((_screen.get_width(), _screen.get_height()), 0, _screen)
+
+    # lines & text
     foreground = pygame.surface.Surface((_screen.get_width(), _screen.get_height()))
     foreground.convert()        # for faster blitting
     foreground = foreground.convert_alpha() # faster blitting with transparent color
+
+    # list of PGobjects in foreground
+    fgObjects = []
+    # index of calib line in fgObjects
+    CALIBLINEIDX = -1
 
     while not done:
         ### event handling
@@ -128,6 +144,10 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
                         WORLDSCALE = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
                         print('pixels: ', WORLDSCALE)
                         DRAW = False
+                        # add line to foreground 'til death'
+                        line = PGObject(pygame.draw.line, (foreground, (255, 0, 0), lineOrig, pos, 1))
+                        fgObjects.append(line)
+                        CALIBLINEIDX = fgObjects.index(line)
                         #print('Drawing stopped')
 
             elif not dragging and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
@@ -159,13 +179,19 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
             img = _cam.get_image()
 
             if SCALE:
-                _snapshot = pygame.transform.scale(img, (_screen.get_width(), _screen.get_height()))
-                _snapshot.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
-                uRect = _screen.blit(_snapshot, (0, 0))
+                snapshot = pygame.transform.scale(img, (_screen.get_width(), _screen.get_height()))
+                snapshot.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
+                uRect = _screen.blit(snapshot, (0, 0))
             else:
                 img.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
                 uRect = _screen.blit(img, (XOFFSET,YOFFSET))
             pygame.display.update(uRect)
+
+            # draw foreground with all objects, as fast as camera framerate
+            if not DRAW:
+                foreground.fill((0,0,0,0))    # erase foreground & make it transparent
+                for o in fgObjects:
+                    o.drawFunction(*o.parameters)
 
             # does not work:
             #pygame.display.set_caption(DEVICE + 'with frame rate: {:0.2f} fps'.format(_clock.get_fps()))
@@ -175,7 +201,12 @@ def loop(_cam, _fps, _screen, _snapshot, _clock):
 
 
 def makeParser():
-    argparser = argparse.ArgumentParser(description='Display camera video with pygame (>= 1.92)')
+    argparser = argparse.ArgumentParser(description='''Display camera video with pygame (>= 1.92).
+    Left mouse button + mouse motion drags video.
+    Right mouse button takes screenshots.
+    CTRL + left mouse button + mouse motion draws calibration line.
+    ALT + left mouse button draws measuring line (not implemented yet).
+    ESC exits.''')
     argparser.add_argument('-l', '--list', action='store_true', help='Print avaiable video devices')
     argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
     argparser.add_argument('device', nargs = '?', default='/dev/video0', help='Name of the camera device')
@@ -201,7 +232,7 @@ def main(_args):
 
     fps = 30
 
-    screen, snapshot, clock = initPygame(cam.get_size())
+    screen, clock = initPygame(cam.get_size())
     print('Using camera', args.device)
     print('Using camera resolution', cam.get_size())
     print('Using initial screen size (%d, %d)'%(screen.get_width(), screen.get_height()))
@@ -211,7 +242,7 @@ def main(_args):
     DEVICE = args.device
     pygame.display.set_caption(DEVICE)
 
-    loop(cam, fps, screen, snapshot, clock)
+    loop(cam, fps, screen, clock)
     pygame.quit()
 
 
