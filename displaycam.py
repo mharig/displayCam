@@ -1,12 +1,13 @@
 # Captures and displays video images
-from __future__ import print_function, division
+from __future__ import print_function, division, absolute_import
 
 ###################################################################
 # TODO:
+#       - make OO
 #       - flags for vertical mirror, horizontal mirror
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool       IN PROGRESS
-#               TODO: text input & output, better deletion of lines (more measure lines)
+#               TODO: text input & output, allow more calibration measurement points
 #       - for the distance measuring tool: text input & output
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
@@ -67,6 +68,15 @@ DEVICE = ''
 PGObject = namedtuple('PGobject', ('drawFunction', 'parameters'))
 
 
+# class PGLoop(object):
+#   enum state = [DRAGGING, DRAWCALIB, DRAWMEASURE, NONE]
+#   def __init__(self, _cam, _fps, _screen, _clock, _scale):
+#       self.state = NONE
+#       pass
+#   def __call__(self):
+#              # loop function goes here
+
+
 def printVideoDevices():
     '''Prints a list of available video devices'''
     camera.init()
@@ -116,10 +126,9 @@ def loop(_cam, _fps, _screen, _clock):
 
     # list of PGobjects in foreground
     fgObjects = []
-    # index of calib line in fgObjects
-    CALIBLINEIDX = -1
-    #index for measure line
-    MEASURELINEIDX = -1
+
+    # list of measured units for averaging
+    measuredValues = []
 
     while not done:
         ### event handling
@@ -170,34 +179,29 @@ def loop(_cam, _fps, _screen, _clock):
                         # add line to foreground 'til death'
                         line = PGObject(pygame.draw.line, (foreground, (255, 0, 0), lineOrig, pos, 1))
                         fgObjects.append(line)
-                        CALIBLINEIDX = fgObjects.index(line)
                     elif DRAWMEASURE:
                         pos = pygame.mouse.get_pos()
-                        distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
-                        print('Measured distance: ', distance*WORLDSCALE, ' your unit')
+                        distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 ) * WORLDSCALE
+                        measuredValues.append(distance)
+                        print('Measured distance: ', distance, ' your unit; average: ', sum(measuredValues)/len(measuredValues))
                         # add line to foreground 'til death'
                         line = PGObject(pygame.draw.line, (foreground, (0, 0, 255), lineOrig, pos, 1))
                         fgObjects.append(line)
-                        MEASURELINEIDX = fgObjects.index(line)
                         DRAWMEASURE = False
             elif not dragging and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
                 pygame.mouse.get_rel()  # init the relative mouse movement
                 if DRAWCALIB_KEY:
-                    if CALIBLINEIDX >= 0:
-                        del fgObjects[CALIBLINEIDX]
-                    if MEASURELINEIDX >= 0:
-                        del fgObjects[MEASURELINEIDX]
+                    fgObjects = []          # delete all lines
+                    measuredValues = []     # delete all measured values
                     lineOrig = pygame.mouse.get_pos()
                     DRAWCALIB = True
                 elif DRAWMEASURE_KEY:
-                    if MEASURELINEIDX >= 0:
-                        del fgObjects[MEASURELINEIDX]
                     lineOrig = pygame.mouse.get_pos()
                     DRAWMEASURE = True
                 elif not SCALE:
                     dragging = True
             elif event.type == pygame.MOUSEMOTION:
-                if not SCALE and dragging:
+                if dragging:
                     xr, yr = pygame.mouse.get_rel()
                     XOFFSET += xr
                     YOFFSET += yr
@@ -217,6 +221,8 @@ def loop(_cam, _fps, _screen, _clock):
                 foreground = foreground.convert_alpha() # faster blitting with transparent color
 
         ### video diplay
+        # to get fastest possible framerate & no flicker (near) all updating should be
+        # made here
         if _cam.query_image():
             img = _cam.get_image()
 
