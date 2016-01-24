@@ -1,11 +1,12 @@
 # Captures and displays video images
-from __future__ import print_function
+from __future__ import print_function, division
 
 ###################################################################
 # TODO:
 #       - flags for vertical mirror, horizontal mirror
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool       IN PROGRESS
+#               TODO: text input & output, better deletion of lines (more measure lines)
 #       - for the distance measuring tool: text input & output
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
@@ -25,6 +26,11 @@ import sys
 import math
 from collections import namedtuple
 
+# Python2 & 3 compatibility
+try: input = raw_input
+except NameError: pass
+
+
 import pygame
 import pygame.camera as camera
 from pygame.locals import HWSURFACE,DOUBLEBUF,RESIZABLE
@@ -41,8 +47,10 @@ XOFFSET = 0
 YOFFSET = 0
 
 # dragging or drawing line
-DRAW = False
-CTRL = False
+DRAWCALIB = False
+DRAWCALIB_KEY = False
+DRAWMEASURE = False
+DRAWMEASURE_KEY = False
 
 # scale or 1:1
 SCALE = False
@@ -93,7 +101,7 @@ def initPygame(_windowSize=(640, 480)):
 
 
 def loop(_cam, _fps, _screen, _clock):
-    global XOFFSET, YOFFSET, DRAW, CTRL, WORLDSCALE
+    global XOFFSET, YOFFSET, DRAWCALIB, DRAWCALIB_KEY, DRAWMEASURE, DRAWMEASURE_KEY, WORLDSCALE
     done = False
     imgTicker = 1
     dragging = False
@@ -110,6 +118,8 @@ def loop(_cam, _fps, _screen, _clock):
     fgObjects = []
     # index of calib line in fgObjects
     CALIBLINEIDX = -1
+    #index for measure line
+    MEASURELINEIDX = -1
 
     while not done:
         ### event handling
@@ -120,10 +130,14 @@ def loop(_cam, _fps, _screen, _clock):
                 if event.key == pygame.K_ESCAPE:
                     done = True
                 elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
-                    CTRL = True
+                    DRAWCALIB_KEY = True
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    DRAWMEASURE_KEY = True
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
-                    CTRL = False
+                    DRAWCALIB_KEY = False
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    DRAWMEASURE_KEY = False
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == RIGHT:    # right mouse button click
                     img = _cam.get_image()
@@ -138,35 +152,63 @@ def loop(_cam, _fps, _screen, _clock):
                 elif event.button == LEFT:
                     if dragging:
                         dragging = False
-                        #print('Dragging stopped')
-                    if DRAW:
+                    elif DRAWCALIB:
                         pos = pygame.mouse.get_pos()
-                        WORLDSCALE = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
-                        print('pixels: ', WORLDSCALE)
-                        DRAW = False
+                        distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
+                        print('pixels: ', distance)
+                        worlddim = None
+                        while worlddim == None:
+                            d = input('Please enter distance in real world: ')
+                            try:
+                                worlddim = float(d)
+                            except ValueError:
+                                print('You MUST enter a valid floating point number!')
+
+                        WORLDSCALE = worlddim / distance
+                        print('Scaling: ', WORLDSCALE, ' your unit/pixels')
+                        DRAWCALIB = False
                         # add line to foreground 'til death'
                         line = PGObject(pygame.draw.line, (foreground, (255, 0, 0), lineOrig, pos, 1))
                         fgObjects.append(line)
                         CALIBLINEIDX = fgObjects.index(line)
-                        #print('Drawing stopped')
-
+                    elif DRAWMEASURE:
+                        pos = pygame.mouse.get_pos()
+                        distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
+                        print('Measured distance: ', distance*WORLDSCALE, ' your unit')
+                        # add line to foreground 'til death'
+                        line = PGObject(pygame.draw.line, (foreground, (0, 0, 255), lineOrig, pos, 1))
+                        fgObjects.append(line)
+                        MEASURELINEIDX = fgObjects.index(line)
+                        DRAWMEASURE = False
             elif not dragging and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
                 pygame.mouse.get_rel()  # init the relative mouse movement
-                if CTRL:
+                if DRAWCALIB_KEY:
+                    if CALIBLINEIDX >= 0:
+                        del fgObjects[CALIBLINEIDX]
+                    if MEASURELINEIDX >= 0:
+                        del fgObjects[MEASURELINEIDX]
                     lineOrig = pygame.mouse.get_pos()
-                    DRAW = True
-                    #print('Drawing started')
+                    DRAWCALIB = True
+                elif DRAWMEASURE_KEY:
+                    if MEASURELINEIDX >= 0:
+                        del fgObjects[MEASURELINEIDX]
+                    lineOrig = pygame.mouse.get_pos()
+                    DRAWMEASURE = True
                 elif not SCALE:
                     dragging = True
-                    #print('Dragging startet')
             elif event.type == pygame.MOUSEMOTION:
                 if not SCALE and dragging:
                     xr, yr = pygame.mouse.get_rel()
                     XOFFSET += xr
                     YOFFSET += yr
-                elif DRAW:
+                elif DRAWCALIB:
+                    # temporary line
                     foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                     pygame.draw.line(foreground, (255, 0, 0), lineOrig, pygame.mouse.get_pos(), 1)
+                elif DRAWMEASURE:
+                    # temporary line
+                    foreground.fill((0,0,0,0))    # erase foreground & make it transparent
+                    pygame.draw.line(foreground, (0, 0, 255), lineOrig, pygame.mouse.get_pos(), 1)
             elif event.type==pygame.VIDEORESIZE:
                 _screen=pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
                 _screen.convert()
@@ -188,7 +230,7 @@ def loop(_cam, _fps, _screen, _clock):
             pygame.display.update(uRect)
 
             # draw foreground with all objects, as fast as camera framerate
-            if not DRAW:
+            if not DRAWCALIB and not DRAWMEASURE:
                 foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                 for o in fgObjects:
                     o.drawFunction(*o.parameters)
@@ -204,9 +246,11 @@ def makeParser():
     argparser = argparse.ArgumentParser(description='''Display camera video with pygame (>= 1.92).
     Left mouse button + mouse motion drags video.
     Right mouse button takes screenshots.
-    CTRL + left mouse button + mouse motion draws calibration line.
-    ALT + left mouse button draws measuring line (not implemented yet).
-    ESC exits.''')
+    DRAWCALIB_KEY + left mouse button + mouse motion draws calibration line.
+    DRAWMEASURE_KEY + left mouse button draws measuring line (not implemented yet).
+    ESC exits.
+
+    Please start this program from command line!''')
     argparser.add_argument('-l', '--list', action='store_true', help='Print avaiable video devices')
     argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
     argparser.add_argument('device', nargs = '?', default='/dev/video0', help='Name of the camera device')
