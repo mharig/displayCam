@@ -3,12 +3,13 @@ from __future__ import print_function, division, absolute_import
 
 ###################################################################
 # TODO:
-#       - make OO
+#       - make OO       IN PROGRESS
 #       - flags for vertical mirror, horizontal mirror
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool       IN PROGRESS
-#               TODO: text input & output, allow more calibration measurement points
-#       - for the distance measuring tool: text input & output
+#               - text input & output, allow more calibration measurement points
+#               - test if a calibration is valid after resize of main window when scaling
+#       - screenshots with lines when CTRL or SHIFT is pressed with right mouse button
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
 #           (screenshot always in max cam resolution?)
@@ -92,7 +93,10 @@ def initCam(_camera='/dev/video0', _res=(640, 480)):
     if cam is None:
         raise Exception('Cannot connect to camera. Maybe in use by other program?')
 
-    cam.start()
+    try:
+        cam.start()
+    except:
+        raise Exception('Cannot connect to camera. Maybe in use by other program?')
 
     return cam
 
