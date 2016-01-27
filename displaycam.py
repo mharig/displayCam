@@ -8,7 +8,6 @@ from __future__ import print_function, division, absolute_import
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool       IN PROGRESS
 #               - text input & output, allow more calibration measurement points
-#               - test if a calibration is valid after resize of main window when scaling
 #       - screenshots with lines when CTRL or SHIFT is pressed with right mouse button
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
@@ -177,10 +176,13 @@ def loop(_cam, _fps, _screen, _clock):
                             except ValueError:
                                 print('You MUST enter a valid floating point number!')
 
-                        WORLDSCALE = worlddim / distance
+                        if distance > 0:
+                            WORLDSCALE = worlddim / distance
+                        else:
+                            WORLDSCALE = 1.0
                         print('Scaling: ', WORLDSCALE, ' your unit/pixels')
                         DRAWCALIB = False
-                        # add line to foreground 'til death'
+                        # add line to foreground 'til death
                         line = PGObject(pygame.draw.line, (foreground, (255, 0, 0), lineOrig, pos, 1))
                         fgObjects.append(line)
                     elif DRAWMEASURE:
@@ -188,7 +190,7 @@ def loop(_cam, _fps, _screen, _clock):
                         distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 ) * WORLDSCALE
                         measuredValues.append(distance)
                         print('Measured distance: ', distance, ' your unit; average: ', sum(measuredValues)/len(measuredValues))
-                        # add line to foreground 'til death'
+                        # add line to foreground 'til death
                         line = PGObject(pygame.draw.line, (foreground, (0, 0, 255), lineOrig, pos, 1))
                         fgObjects.append(line)
                         DRAWMEASURE = False
@@ -197,6 +199,7 @@ def loop(_cam, _fps, _screen, _clock):
                 if DRAWCALIB_KEY:
                     fgObjects = []          # delete all lines
                     measuredValues = []     # delete all measured values
+                    WORLDSCALE = 1.0        # reset calibration
                     lineOrig = pygame.mouse.get_pos()
                     DRAWCALIB = True
                 elif DRAWMEASURE_KEY:
@@ -220,9 +223,13 @@ def loop(_cam, _fps, _screen, _clock):
             elif event.type==pygame.VIDEORESIZE:
                 _screen=pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
                 _screen.convert()
-                foreground = pygame.surface((_screen.get_width(), _screen.get_height()), pygame.SRCALPHA)
+                foreground = pygame.surface.Surface((_screen.get_width(), _screen.get_height()), pygame.SRCALPHA)
                 foreground.convert()
                 foreground = foreground.convert_alpha() # faster blitting with transparent color
+                # calibration is no longer valid:
+                fgObjects = []          # delete all lines
+                measuredValues = []     # delete all measured values
+                WORLDSCALE = 1.0        # reset calibration
 
         ### video diplay
         # to get fastest possible framerate & no flicker (near) all updating should be
