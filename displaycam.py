@@ -7,7 +7,7 @@ from __future__ import print_function, division, absolute_import
 #       - flags for vertical mirror, horizontal mirror
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool       IN PROGRESS
-#               - text input & output, allow more calibration measurement points
+#               - text input & output
 #       - screenshots with lines when CTRL or SHIFT is pressed with right mouse button
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
@@ -26,6 +26,8 @@ import argparse
 import sys
 import math
 from collections import namedtuple
+from operator import add, sub
+
 
 # Python2 & 3 compatibility
 try: input = raw_input
@@ -101,7 +103,7 @@ class PGLoop(object):
             ### event handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    done = True
+                    DONE = True
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         DONE = True
@@ -134,7 +136,7 @@ class PGLoop(object):
                         if self.state == self.DRAGGING:
                             self.state = self.NONE
                         elif self.state == self.DRAWCALIB:
-                            pos = pygame.mouse.get_pos()
+                            pos = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                             distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
                             print('pixels: ', distance)
                             worlddim = None
@@ -152,7 +154,7 @@ class PGLoop(object):
                             line = PGObject(pygame.draw.line, (foreground, (255, 0, 0), lineOrig, pos, 1))
                             self.calibLines.append(line)
                         elif self.state == self.DRAWMEASURE:
-                            pos = pygame.mouse.get_pos()
+                            pos = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                             distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
                             self.measuredValues.append(MeasuredValue(distance, distance * self.WORLDSCALE))
                             print('Measured distance: ', distance * self.WORLDSCALE, ' your unit; average: ',
@@ -165,30 +167,24 @@ class PGLoop(object):
                 elif not self.state == self.DRAGGING and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
                     pygame.mouse.get_rel()  # init the relative mouse movement
                     if DRAWCALIB_KEY:
-                        lineOrig = pygame.mouse.get_pos()
-                        lineOrig[0] += XOFFSET
-                        lineOrig[1] += YOFFSET
+                        lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                         self.state = self.DRAWCALIB
                     elif DRAWMEASURE_KEY:
-                        lineOrig = pygame.mouse.get_pos()
-                        lineOrig[0] += XOFFSET
-                        lineOrig[1] += YOFFSET
+                        lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                         self.state = self.DRAWMEASURE
                     elif not self.scale:
                         self.state = self.DRAGGING
                 elif event.type == pygame.MOUSEMOTION:
                     if self.state == self.DRAGGING:
-                        xr, yr = pygame.mouse.get_rel()
-                        XOFFSET += xr
-                        YOFFSET += yr
+                        XOFFSET, YOFFSET = vectorAdd((XOFFSET, YOFFSET), pygame.mouse.get_rel())
                     elif self.state == self.DRAWCALIB:
                         # temporary line
                         foreground.fill((0,0,0,0))    # erase foreground & make it transparent
-                        pygame.draw.line(foreground, (255, 0, 0), lineOrig, pygame.mouse.get_pos(), 1)
+                        pygame.draw.line(foreground, (255, 0, 0), lineOrig, vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET)), 1)
                     elif self.state == self.DRAWMEASURE:
                         # temporary line
                         foreground.fill((0,0,0,0))    # erase foreground & make it transparent
-                        pygame.draw.line(foreground, (0, 0, 255), lineOrig, pygame.mouse.get_pos(), 1)
+                        pygame.draw.line(foreground, (0, 0, 255), lineOrig, vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET)), 1)
                 elif event.type==pygame.VIDEORESIZE:
                     self.screen=pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
                     self.screen.convert()
@@ -275,6 +271,15 @@ class PGLoop(object):
         self.WORLDSCALE = 1.0
         self.measureLines = []
         self.calibLines = []
+
+
+
+def vectorAdd(_a, _b):
+    return tuple(map(add, _a, _b))
+
+
+def vectorSub(_a, _b):
+    return tuple(map(sub, _a, _b))
 
 
 def printVideoDevices():
