@@ -1,4 +1,5 @@
 # Captures and displays video images
+# Dependencies: PyGame >= 1.9
 from __future__ import print_function, division, absolute_import
 
 ###################################################################
@@ -6,13 +7,14 @@ from __future__ import print_function, division, absolute_import
 #       - make OO       IN PROGRESS
 #       - flags for vertical mirror, horizontal mirror
 #       - split screen to display last/loaded still image side by side with video
-#       - distance measuring tool       IN PROGRESS
-#               - text input & output
-#       - screenshots with lines when CTRL or SHIFT is pressed with right mouse button
+#       - distance measuring tool
+#               - text input & output in PyGame
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
 #           (screenshot always in max cam resolution?)
 #           current behaviour: screenshot res = vid res
+#       - DEBUG: Behaviour on draw calib line is not 100% consistent. Sometimes more than one calibration
+#               is invoked, sometimes it does not recognize mouse button up.
 ###################################################################
 
 
@@ -39,19 +41,19 @@ import pygame.camera as camera
 from pygame.locals import HWSURFACE,DOUBLEBUF,RESIZABLE
 
 # define the mouse "buttons"
-(   LEFT,
-    MIDDLE,
-    RIGHT,
-    WHEEL_UP,
-    WHEEL_DOWN) = range(1,6)
+( LEFT,
+  MIDDLE,
+  RIGHT,
+  WHEEL_UP,
+  WHEEL_DOWN) = range(1,6)
 
 
 # just make args.device global
 DEVICE = ''
 
 
-# objects that are drawn to foreground, like lines and text
-PGObject = namedtuple('PGobject', ('drawFunction', 'parameters'))
+# objects that are drawn to foreground or other surface, like lines and text
+PGObject = namedtuple('PGobject', ('drawFunction', 'surface', 'parameters'))
 
 # Calibration values
 CalibValue = namedtuple('CalibValue', ('pixels', 'worlddim'))
@@ -63,7 +65,7 @@ class MeasuredValue(object):
         self.result = _result
 
 
-
+### main PyGame loop
 class PGLoop(object):
 
     [DRAGGING, DRAWCALIB, DRAWMEASURE, NONE] = range(4)
@@ -74,7 +76,7 @@ class PGLoop(object):
         self.clock = _clock
         self.scale = _scale
 
-        self.state = self.NONE
+        self.state = PGLoop.NONE
         self.measuredValues = []        # list of namedtuples
         self.calibValues = []           # list of namedtuples
         self.WORLDSCALE = 1.0
@@ -84,6 +86,7 @@ class PGLoop(object):
 
 
     def __call__(self):
+        # Flags and more
         DRAWCALIB_KEY = False
         DRAWMEASURE_KEY = False
         XOFFSET = 0
@@ -129,13 +132,21 @@ class PGLoop(object):
                         while op.exists(snapName):
                             IMGCOUNTER += 1
                             snapName = 'snapshot_' + str(IMGCOUNTER) + '.png'
+
+                        # draw the lines if requested
+                        if DRAWCALIB_KEY or DRAWMEASURE_KEY:
+                            for o in self.calibLines:
+                                o.drawFunction(img, *o.parameters)
+                            for o in self.measureLines:
+                                o.drawFunction(img, *o.parameters)
+
                         pygame.image.save(img, snapName)
                         print('Saved snapshot as', snapName)
                         IMGCOUNTER += 1
                     elif event.button == LEFT:
-                        if self.state == self.DRAGGING:
-                            self.state = self.NONE
-                        elif self.state == self.DRAWCALIB:
+                        if self.state == PGLoop.DRAGGING:
+                            self.state = PGLoop.NONE
+                        elif self.state == PGLoop.DRAWCALIB:
                             pos = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                             distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
                             print('pixels: ', distance)
@@ -149,39 +160,39 @@ class PGLoop(object):
 
                             self.calibValues.append(CalibValue(distance, worlddim))
                             self.updateCalibration()
-                            self.state = self.NONE
+                            self.state = PGLoop.NONE
                             # add line to foreground 'til death
-                            line = PGObject(pygame.draw.line, (foreground, (255, 0, 0), lineOrig, pos, 1))
+                            line = PGObject(pygame.draw.line, foreground, ((255, 0, 0), lineOrig, pos, 1))
                             self.calibLines.append(line)
-                        elif self.state == self.DRAWMEASURE:
+                        elif self.state == PGLoop.DRAWMEASURE:
                             pos = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                             distance = math.sqrt( (pos[1]-lineOrig[1])**2 + (pos[0]-lineOrig[0])**2 )
                             self.measuredValues.append(MeasuredValue(distance, distance * self.WORLDSCALE))
                             print('Measured distance: ', distance * self.WORLDSCALE, ' your unit; average: ',
                                 self.getMeasuredValuesAverage())
 
-                            self.state = self.NONE
+                            self.state = PGLoop.NONE
                             # add line to foreground 'til death
-                            line = PGObject(pygame.draw.line, (foreground, (0, 0, 255), lineOrig, pos, 1))
+                            line = PGObject(pygame.draw.line, foreground, ((0, 0, 255), lineOrig, pos, 1))
                             self.measureLines.append(line)
-                elif not self.state == self.DRAGGING and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
+                elif not self.state == PGLoop.DRAGGING and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
                     pygame.mouse.get_rel()  # init the relative mouse movement
                     if DRAWCALIB_KEY:
                         lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
-                        self.state = self.DRAWCALIB
+                        self.state = PGLoop.DRAWCALIB
                     elif DRAWMEASURE_KEY:
                         lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
-                        self.state = self.DRAWMEASURE
+                        self.state = PGLoop.DRAWMEASURE
                     elif not self.scale:
-                        self.state = self.DRAGGING
+                        self.state = PGLoop.DRAGGING
                 elif event.type == pygame.MOUSEMOTION:
-                    if self.state == self.DRAGGING:
+                    if self.state == PGLoop.DRAGGING:
                         XOFFSET, YOFFSET = vectorAdd((XOFFSET, YOFFSET), pygame.mouse.get_rel())
-                    elif self.state == self.DRAWCALIB:
+                    elif self.state == PGLoop.DRAWCALIB:
                         # temporary line
                         foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                         pygame.draw.line(foreground, (255, 0, 0), lineOrig, vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET)), 1)
-                    elif self.state == self.DRAWMEASURE:
+                    elif self.state == PGLoop.DRAWMEASURE:
                         # temporary line
                         foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                         pygame.draw.line(foreground, (0, 0, 255), lineOrig, vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET)), 1)
@@ -210,12 +221,12 @@ class PGLoop(object):
                 pygame.display.update(uRect)
 
                 # draw foreground with all objects, as fast as camera framerate
-                if not self.state == self.DRAWCALIB and not self.state == self.DRAWMEASURE:
+                if not self.state == PGLoop.DRAWCALIB and not self.state == PGLoop.DRAWMEASURE:
                     foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                     for o in self.calibLines:
-                        o.drawFunction(*o.parameters)
+                        o.drawFunction(o.surface, *o.parameters)
                     for o in self.measureLines:
-                        o.drawFunction(*o.parameters)
+                        o.drawFunction(o.surface, *o.parameters)
 
                 # does not work:
                 #pygame.display.set_caption(DEVICE + 'with frame rate: {:0.2f} fps'.format(_clock.get_fps()))
@@ -235,6 +246,8 @@ class PGLoop(object):
 
 
     def updateMeasuredValues(self):
+        '''Iterates over measured distances and calculates arithmetic mean.'''
+
         sum = 0
         for m in self.measuredValues:
             m.result = m.pixels * self.WORLDSCALE
@@ -246,6 +259,7 @@ class PGLoop(object):
 
 
     def updateCalibration(self):
+        '''Iterates over calibration levels and calculates arithmetic mean, then updates measured distances.'''
         sum = 0
         for c in self.calibValues:
             if c.pixels > 0:
@@ -321,9 +335,9 @@ def initPygame(_windowSize=(640, 480)):
 def makeParser():
     argparser = argparse.ArgumentParser(description='''Display camera video with pygame (>= 1.92).
     Left mouse button + mouse motion drags video.
-    Right mouse button takes screenshots.
+    Right mouse button takes screenshots, CTRL + right mouse button saves with drawn lines.
     CTRL + left mouse button + mouse motion draws calibration line.
-    SHIFT + left mouse button draws measuring line (not implemented yet).
+    SHIFT + left mouse button draws measuring line.
     DEL deletes measured values.
     CTRL + DEL deletes calibration (including measured values).
     ESC exits.
@@ -339,7 +353,7 @@ def makeParser():
 
 
 def main(_args):
-    global SCALE, DEVICE
+    global DEVICE
     argparser = makeParser()
     args = argparser.parse_args(_args)
 
@@ -359,7 +373,7 @@ def main(_args):
         print('Scaling video to screen size')
 
     DEVICE = args.device
-    pygame.display.set_caption(DEVICE)
+    pygame.display.set_caption(args.device)
 
     loop = PGLoop(cam, fps, screen, clock, args.scale)
     loop()
