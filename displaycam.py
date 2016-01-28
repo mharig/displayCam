@@ -337,7 +337,7 @@ def initPygame(_windowSize=(640, 480)):
 
 
 def makeParser():
-    argparser = argparse.ArgumentParser(description='''Display camera video with pygame (>= 1.92).
+    argparser = argparse.ArgumentParser(description='''Display camera video with pygame (>= 1.9).
     Left mouse button + mouse motion drags video.
     Right mouse button takes screenshots, CTRL + right mouse button saves with drawn lines.
     CTRL + left mouse button + mouse motion draws calibration line.
