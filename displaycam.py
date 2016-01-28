@@ -4,11 +4,11 @@ from __future__ import print_function, division, absolute_import
 
 ###################################################################
 # TODO:
-#       - make OO       IN PROGRESS
-#       - flags for vertical mirror, horizontal mirror
+#       - make more OO       IN PROGRESS
 #       - split screen to display last/loaded still image side by side with video
 #       - distance measuring tool
 #               - text input & output in PyGame
+#               - make lines with nice whiskers
 #       - move video offsets with arrow keys
 #       - make possible to use different video & screenshot resolutions
 #           (screenshot always in max cam resolution?)
@@ -35,7 +35,7 @@ from operator import add, sub
 try: input = raw_input
 except NameError: pass
 
-
+# PyGame >= 1.9 must be installed!
 import pygame
 import pygame.camera as camera
 from pygame.locals import HWSURFACE,DOUBLEBUF,RESIZABLE
@@ -69,12 +69,14 @@ class MeasuredValue(object):
 class PGLoop(object):
 
     [DRAGGING, DRAWCALIB, DRAWMEASURE, NONE] = range(4)
-    def __init__(self, _cam, _fps, _screen, _clock, _scale):
+    def __init__(self, _cam, _fps, _screen, _clock, _args):
         self.cam = _cam
         self.fps = _fps
         self.screen = _screen
         self.clock = _clock
-        self.scale = _scale
+        self.scale = _args.scale
+        self.flipHorizontal = _args.horizontal
+        self.flipVertical = _args.vertical
 
         self.state = PGLoop.NONE
         self.measuredValues = []        # list of namedtuples
@@ -127,7 +129,7 @@ class PGLoop(object):
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == RIGHT:    # right mouse button click
                         img = self.cam.get_image()
-
+                        img = pygame.transform.flip(img, self.flipHorizontal, self.flipVertical)
                         snapName = 'snapshot_' + str(IMGCOUNTER) + '.png'
                         while op.exists(snapName):
                             IMGCOUNTER += 1
@@ -213,9 +215,11 @@ class PGLoop(object):
 
                 if self.scale:
                     snapshot = pygame.transform.scale(img, (self.screen.get_width(), self.screen.get_height()))
+                    snapshot = pygame.transform.flip(snapshot, self.flipHorizontal, self.flipVertical)
                     snapshot.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
                     uRect = self.screen.blit(snapshot, (0, 0))
                 else:
+                    img = pygame.transform.flip(img, self.flipHorizontal, self.flipVertical)
                     img.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
                     uRect = self.screen.blit(img, (XOFFSET,YOFFSET))
                 pygame.display.update(uRect)
@@ -345,6 +349,8 @@ def makeParser():
     Please start this program from command line!''')
     argparser.add_argument('-l', '--list', action='store_true', help='Print avaiable video devices')
     argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
+    argparser.add_argument('-m', '--horizontal', action='store_true', help='Flip video horizontal')
+    argparser.add_argument('-v', '--vertical', action='store_true', help='Flip video vertical')
     argparser.add_argument('device', nargs = '?', default='/dev/video0', help='Name of the camera device')
     argparser.add_argument('width', nargs = '?', type=int, default=640, help='Width of view')
     argparser.add_argument('height', nargs = '?', type=int, default=480, help='Height of view')
@@ -375,7 +381,7 @@ def main(_args):
     DEVICE = args.device
     pygame.display.set_caption(args.device)
 
-    loop = PGLoop(cam, fps, screen, clock, args.scale)
+    loop = PGLoop(cam, fps, screen, clock, args)
     loop()
 
     pygame.quit()
