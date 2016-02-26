@@ -10,7 +10,9 @@ from __future__ import print_function, division, absolute_import
 #               - text input & output in PyGame
 #               - make lines with nice whiskers
 #       - move video offsets with arrow keys
-#       - make possible to use different video & screenshot resolutions
+#       - make it possible to use different video & screenshot resolutions
+#           This will be difficult, because the UVC device driver on Linux does not support
+#           still image capture :-( (atm. see http://www.ideasonboard.org/uvc/ for current info)
 #           (screenshot always in max cam resolution?)
 #           current behaviour: screenshot res = vid res
 #       - DEBUG: Behaviour on draw calib line is not 100% consistent. Sometimes more than one calibration
@@ -198,8 +200,8 @@ class PGLoop(object):
                         # temporary line
                         foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                         pygame.draw.line(foreground, (0, 0, 255), lineOrig, vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET)), 1)
-                elif event.type==pygame.VIDEORESIZE:
-                    self.screen=pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
+                elif event.type == pygame.VIDEORESIZE:
+                    self.screen = pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
                     self.screen.convert()
                     foreground = pygame.surface.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
                     foreground.convert()
@@ -225,11 +227,17 @@ class PGLoop(object):
                 pygame.display.update(uRect)
 
                 # draw foreground with all objects, as fast as camera framerate
-                if not self.state == PGLoop.DRAWCALIB and not self.state == PGLoop.DRAWMEASURE:
-                    foreground.fill((0,0,0,0))    # erase foreground & make it transparent
+                if self.state != PGLoop.DRAWCALIB and self.state != PGLoop.DRAWMEASURE:
+                    erased = []
                     for o in self.calibLines:
+                        if o.surface not in erased:
+                            o.surface.fill((0,0,0,0))    # erase surface & make it transparent
+                            erased.append(o.surface)
                         o.drawFunction(o.surface, *o.parameters)
                     for o in self.measureLines:
+                        if o.surface not in erased:
+                            o.surface.fill((0,0,0,0))    # erase surface & make it transparent
+                            erased.append(o.surface)
                         o.drawFunction(o.surface, *o.parameters)
 
                 # does not work:
@@ -351,9 +359,10 @@ def makeParser():
     argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
     argparser.add_argument('-m', '--horizontal', action='store_true', help='Flip video horizontal')
     argparser.add_argument('-v', '--vertical', action='store_true', help='Flip video vertical')
-    argparser.add_argument('device', nargs = '?', default='/dev/video0', help='Name of the camera device')
-    argparser.add_argument('width', nargs = '?', type=int, default=640, help='Width of view')
-    argparser.add_argument('height', nargs = '?', type=int, default=480, help='Height of view')
+    argparser.add_argument('-d', '--device', nargs = '?', default='/dev/video0', help='Name of the camera device')
+    argparser.add_argument('-w', '--width', nargs = '?', type=int, default=176, help='Width of view')
+    argparser.add_argument('-h', '--height', nargs = '?', type=int, default=144, help='Height of view')
+    argparser.add_argument('-?', '--help', action='store_true', help='Print usage information')
 
     return argparser
 
@@ -365,6 +374,9 @@ def main(_args):
 
     if args.list:
         printVideoDevices()
+        exit()
+    elif args.help:
+        argparser.print_help()
         exit()
 
     cam = initCam(args.device, (args.width, args.height))
