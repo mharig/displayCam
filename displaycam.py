@@ -354,7 +354,7 @@ def makeParser():
     CTRL + DEL deletes calibration (including measured values).
     ESC exits.
 
-    Please start this program from command line!''')
+    Please start this program from command line!''', add_help=False)
     argparser.add_argument('-l', '--list', action='store_true', help='Print avaiable video devices')
     argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
     argparser.add_argument('-m', '--horizontal', action='store_true', help='Flip video horizontal')
