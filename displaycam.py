@@ -9,6 +9,7 @@ from __future__ import print_function, division, absolute_import
 #       - distance measuring tool
 #               - text input & output in PyGame
 #               - make lines with nice whiskers
+#               - save & load calibration (only values?)
 #       - move video offsets with arrow keys
 #       - make it possible to use different video & screenshot resolutions
 #           This will be difficult, because the UVC device driver on Linux does not support
@@ -21,7 +22,7 @@ from __future__ import print_function, division, absolute_import
 
 
 __author__ = 'Michael Harig <floss@michaelharig.de>'
-__version__ = '0.1'
+__version__ = '0.2'
 __license__ = '''GPL v3'''
 
 
@@ -32,6 +33,9 @@ import math
 from collections import namedtuple
 from operator import add, sub
 
+# Python2 & 3 compatibility
+try: import configparser
+except NameError: import ConfigParser as configparser
 
 # Python2 & 3 compatibility
 try: input = raw_input
@@ -53,6 +57,8 @@ from pygame.locals import HWSURFACE,DOUBLEBUF,RESIZABLE
 # just make args.device global
 DEVICE = ''
 
+INIFILE = '.dc'
+
 
 # objects that are drawn to foreground or other surface, like lines and text
 PGObject = namedtuple('PGobject', ('drawFunction', 'surface', 'parameters'))
@@ -71,19 +77,14 @@ class MeasuredValue(object):
 class PGLoop(object):
 
     [DRAGGING, DRAWCALIB, DRAWMEASURE, NONE] = range(4)
-    def __init__(self, _cam, _fps, _screen, _clock, _args):
-        self.cam = _cam
-        self.fps = _fps
-        self.screen = _screen
-        self.clock = _clock
-        self.scale = _args.scale
-        self.flipHorizontal = _args.horizontal
-        self.flipVertical = _args.vertical
+    def __init__(self, _args, _cfg):
+        self.args = _args
+        self.cfg = _cfg
 
         self.state = PGLoop.NONE
         self.measuredValues = []        # list of namedtuples
         self.calibValues = []           # list of namedtuples
-        self.WORLDSCALE = 1.0
+        self.WORLDSCALE = _cfg.getfloat('MEASURING', 'worldscale')
 
         self.calibLines = []
         self.measureLines = []
@@ -99,10 +100,10 @@ class PGLoop(object):
         IMGCOUNTER = 1
 
         # video image
-        snapshot = pygame.surface.Surface((self.screen.get_width(), self.screen.get_height()), 0, self.screen)
+        snapshot = pygame.surface.Surface((self.args.screen.get_width(), self.args.screen.get_height()), 0, self.args.screen)
 
         # lines & text
-        foreground = pygame.surface.Surface((self.screen.get_width(), self.screen.get_height()))
+        foreground = pygame.surface.Surface((self.args.screen.get_width(), self.args.screen.get_height()))
         foreground.convert()        # for faster blitting
         foreground = foreground.convert_alpha() # faster blitting with transparent color
 
@@ -130,8 +131,8 @@ class PGLoop(object):
                             self.deleteCalibration()
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == RIGHT:    # right mouse button click
-                        img = self.cam.get_image()
-                        img = pygame.transform.flip(img, self.flipHorizontal, self.flipVertical)
+                        img = self.args.cam.get_image()
+                        img = pygame.transform.flip(img, self.args.flipHorizontal, self.args.flipVertical)
                         snapName = 'snapshot_' + str(IMGCOUNTER) + '.png'
                         while op.exists(snapName):
                             IMGCOUNTER += 1
@@ -187,7 +188,7 @@ class PGLoop(object):
                     elif DRAWMEASURE_KEY:
                         lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                         self.state = PGLoop.DRAWMEASURE
-                    elif not self.scale:
+                    elif not self.args.scale:
                         self.state = PGLoop.DRAGGING
                 elif event.type == pygame.MOUSEMOTION:
                     if self.state == PGLoop.DRAGGING:
@@ -201,9 +202,9 @@ class PGLoop(object):
                         foreground.fill((0,0,0,0))    # erase foreground & make it transparent
                         pygame.draw.line(foreground, (0, 0, 255), lineOrig, vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET)), 1)
                 elif event.type == pygame.VIDEORESIZE:
-                    self.screen = pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
-                    self.screen.convert()
-                    foreground = pygame.surface.Surface((self.screen.get_width(), self.screen.get_height()), pygame.SRCALPHA)
+                    self.args.screen = pygame.display.set_mode(event.dict['size'], HWSURFACE|DOUBLEBUF|RESIZABLE)
+                    self.args.screen.convert()
+                    foreground = pygame.surface.Surface((self.args.screen.get_width(), self.args.screen.get_height()), pygame.SRCALPHA)
                     foreground.convert()
                     foreground = foreground.convert_alpha() # faster blitting with transparent color
                     # calibration is no longer valid:
@@ -212,18 +213,18 @@ class PGLoop(object):
             ### video diplay
             # to get fastest possible framerate & no flicker (near) all updating should be
             # made here
-            if self.cam.query_image():
-                img = self.cam.get_image()
+            if self.args.cam.query_image():
+                img = self.args.cam.get_image()
 
-                if self.scale:
-                    snapshot = pygame.transform.scale(img, (self.screen.get_width(), self.screen.get_height()))
-                    snapshot = pygame.transform.flip(snapshot, self.flipHorizontal, self.flipVertical)
+                if self.args.scale:
+                    snapshot = pygame.transform.scale(img, (self.args.screen.get_width(), self.args.screen.get_height()))
+                    snapshot = pygame.transform.flip(snapshot, self.args.flipHorizontal, self.args.flipVertical)
                     snapshot.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
-                    uRect = self.screen.blit(snapshot, (0, 0))
+                    uRect = self.args.screen.blit(snapshot, (0, 0))
                 else:
-                    img = pygame.transform.flip(img, self.flipHorizontal, self.flipVertical)
+                    img = pygame.transform.flip(img, self.args.flipHorizontal, self.args.flipVertical)
                     img.blit(foreground, (0, 0), special_flags=(pygame.BLEND_RGBA_ADD))
-                    uRect = self.screen.blit(img, (XOFFSET,YOFFSET))
+                    uRect = self.args.screen.blit(img, (XOFFSET,YOFFSET))
                 pygame.display.update(uRect)
 
                 # draw foreground with all objects, as fast as camera framerate
@@ -282,6 +283,9 @@ class PGLoop(object):
         else:
             self.WORLDSCALE = 1.0
         print('New scaling: ', self.WORLDSCALE, ' your unit/pixels')
+        self.cfg.set('MEASURING', 'worldscale', self.WORLDSCALE)
+        with open(INIFILE, 'wb') as fp:
+            self.cfg.write(fp)
 
         self.updateMeasuredValues()
 
@@ -357,8 +361,8 @@ def makeParser():
     Please start this program from command line!''', add_help=False)
     argparser.add_argument('-l', '--list', action='store_true', help='Print avaiable video devices')
     argparser.add_argument('-s', '--scale', action='store_true', help='Scale video, otherwise it is displayed 1:1 and may be dragged with the mouse')
-    argparser.add_argument('-m', '--horizontal', action='store_true', help='Flip video horizontal')
-    argparser.add_argument('-v', '--vertical', action='store_true', help='Flip video vertical')
+    argparser.add_argument('-m', '--flipHorizontal', action='store_true', help='Flip video horizontal')
+    argparser.add_argument('-v', '--flipVertical', action='store_true', help='Flip video vertical')
     argparser.add_argument('-d', '--device', nargs = '?', default='/dev/video0', help='Name of the camera device')
     argparser.add_argument('-w', '--width', nargs = '?', type=int, default=176, help='Width of view')
     argparser.add_argument('-h', '--height', nargs = '?', type=int, default=144, help='Height of view')
@@ -393,7 +397,20 @@ def main(_args):
     DEVICE = args.device
     pygame.display.set_caption(args.device)
 
-    loop = PGLoop(cam, fps, screen, clock, args)
+    args.cam = cam
+    args.fps = fps
+    args.screen = screen
+    args.clock = clock
+
+    cfg = configparser.RawConfigParser()
+    cfg.read(INIFILE)
+    if not cfg.has_section('MEASURING'):
+        cfg.add_section('MEASURING')
+    if not cfg.has_option('MEASURING', 'worldscale'):
+        cfg.set('MEASURING', 'worldscale', 1.0)
+    # TODO: handle options for screen resolution, camera resolution, ...
+
+    loop = PGLoop(args, cfg)
     loop()
 
     pygame.quit()
