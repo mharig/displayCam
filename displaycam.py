@@ -4,8 +4,9 @@ from __future__ import print_function, division, absolute_import
 
 ###################################################################
 # TODO:
+#       - display/hide grid with calib raster, shortcut 'g'
 #       - make more OO       IN PROGRESS
-#       - split screen to display last/loaded still image side by side with video
+#       - split screen to display last/loaded still image side by side or overlayed with video
 #       - distance measuring tool
 #               - text input & output in PyGame
 #               - make lines with nice whiskers
@@ -16,8 +17,11 @@ from __future__ import print_function, division, absolute_import
 #           still image capture :-( (atm. see http://www.ideasonboard.org/uvc/ for current info)
 #           (screenshot always in max cam resolution?)
 #           current behaviour: screenshot res = vid res
+#       - 'v' to start/stop saving video. What format? H264 is good, but does a Python lib exists? Seems: no (py264 is dead)
 #       - DEBUG: Behaviour on draw calib line is not 100% consistent. Sometimes more than one calibration
 #               is invoked, sometimes it does not recognize mouse button up.
+#       - DEBUG: moving video when cam res is bigger than screen res does not redraw properly
+#       - DEBUG: erasing of grid does not work! (lines 140 & 259)
 ###################################################################
 
 
@@ -61,7 +65,7 @@ INIFILE = '.dc'
 
 
 # objects that are drawn to foreground or other surface, like lines and text
-PGObject = namedtuple('PGobject', ('drawFunction', 'surface', 'parameters'))
+PGObject = namedtuple('PGobject', ('drawFunction', 'surface', 'parameters', 'visible'))
 
 # Calibration values
 CalibValue = namedtuple('CalibValue', ('pixels', 'worlddim'))
@@ -86,17 +90,21 @@ class PGLoop(object):
         self.calibValues = []           # list of namedtuples
         self.WORLDSCALE = _cfg.getfloat('MEASURING', 'worldscale')
 
+        # assets
         self.calibLines = []
         self.measureLines = []
+        self.grid = []
 
 
     def __call__(self):
         # Flags and more
-        DRAWCALIB_KEY = False
-        DRAWMEASURE_KEY = False
+        DRAWCALIB_FLAG = False
+        DRAWMEASURE_FLAG = False
+        DRAWGRID_FLAG = False
         XOFFSET = 0
         YOFFSET = 0
         DONE = False
+        # counter for saved images
         IMGCOUNTER = 1
 
         # video image
@@ -116,19 +124,25 @@ class PGLoop(object):
                     if event.key == pygame.K_ESCAPE:
                         DONE = True
                     elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
-                        DRAWCALIB_KEY = True
+                        DRAWCALIB_FLAG = True
                     elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                        DRAWMEASURE_KEY = True
+                        DRAWMEASURE_FLAG = True
                 elif event.type == pygame.KEYUP:
                     if event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
-                        DRAWCALIB_KEY = False
+                        DRAWCALIB_FLAG = False
                     elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                        DRAWMEASURE_KEY = False
+                        DRAWMEASURE_FLAG = False
                     elif event.key == pygame.K_DELETE:
-                        if not DRAWCALIB_KEY:
+                        if not DRAWCALIB_FLAG:
                             self.deleteMeasurements()
                         else:
                             self.deleteCalibration()
+                    elif event.key == pygame.K_g:
+                        if not DRAWGRID_FLAG:
+                            self.grid = self.makeGrid(foreground, 1.0/self.WORLDSCALE)
+                        else:
+                            self.grid = []
+                        DRAWGRID_FLAG = not DRAWGRID_FLAG
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == RIGHT:    # right mouse button click
                         img = self.args.cam.get_image()
@@ -139,7 +153,7 @@ class PGLoop(object):
                             snapName = 'snapshot_' + str(IMGCOUNTER) + '.png'
 
                         # draw the lines if requested
-                        if DRAWCALIB_KEY or DRAWMEASURE_KEY:
+                        if DRAWCALIB_FLAG or DRAWMEASURE_FLAG:
                             for o in self.calibLines:
                                 o.drawFunction(img, *o.parameters)
                             for o in self.measureLines:
@@ -167,7 +181,7 @@ class PGLoop(object):
                             self.updateCalibration()
                             self.state = PGLoop.NONE
                             # add line to foreground 'til death
-                            line = PGObject(pygame.draw.line, foreground, ((255, 0, 0), lineOrig, pos, 1))
+                            line = PGObject(pygame.draw.line, foreground, ((255, 0, 0), lineOrig, pos, 1), True)
                             self.calibLines.append(line)
                         elif self.state == PGLoop.DRAWMEASURE:
                             pos = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
@@ -178,14 +192,14 @@ class PGLoop(object):
 
                             self.state = PGLoop.NONE
                             # add line to foreground 'til death
-                            line = PGObject(pygame.draw.line, foreground, ((0, 0, 255), lineOrig, pos, 1))
+                            line = PGObject(pygame.draw.line, foreground, ((0, 0, 255), lineOrig, pos, 1), True)
                             self.measureLines.append(line)
                 elif not self.state == PGLoop.DRAGGING and event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT:
                     pygame.mouse.get_rel()  # init the relative mouse movement
-                    if DRAWCALIB_KEY:
+                    if DRAWCALIB_FLAG:
                         lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                         self.state = PGLoop.DRAWCALIB
-                    elif DRAWMEASURE_KEY:
+                    elif DRAWMEASURE_FLAG:
                         lineOrig = vectorSub(pygame.mouse.get_pos(), (XOFFSET, YOFFSET))
                         self.state = PGLoop.DRAWMEASURE
                     elif not self.args.scale:
@@ -209,6 +223,7 @@ class PGLoop(object):
                     foreground = foreground.convert_alpha() # faster blitting with transparent color
                     # calibration is no longer valid:
                     self.deleteCalibration()
+                    self.grid = []
 
             ### video diplay
             # to get fastest possible framerate & no flicker (near) all updating should be
@@ -230,6 +245,7 @@ class PGLoop(object):
                 # draw foreground with all objects, as fast as camera framerate
                 if self.state != PGLoop.DRAWCALIB and self.state != PGLoop.DRAWMEASURE:
                     erased = []
+                    # TODO: use itertools
                     for o in self.calibLines:
                         if o.surface not in erased:
                             o.surface.fill((0,0,0,0))    # erase surface & make it transparent
@@ -238,6 +254,11 @@ class PGLoop(object):
                     for o in self.measureLines:
                         if o.surface not in erased:
                             o.surface.fill((0,0,0,0))    # erase surface & make it transparent
+                            erased.append(o.surface)
+                        o.drawFunction(o.surface, *o.parameters)
+                    for o in self.grid:
+                        if o.surface not in erased:
+                            o.surface.fill((0,0,0,0))
                             erased.append(o.surface)
                         o.drawFunction(o.surface, *o.parameters)
 
@@ -284,7 +305,7 @@ class PGLoop(object):
             self.WORLDSCALE = 1.0
         print('New scaling: ', self.WORLDSCALE, ' your unit/pixels')
         self.cfg.set('MEASURING', 'worldscale', self.WORLDSCALE)
-        with open(INIFILE, 'wb') as fp:
+        with open(INIFILE, 'wt') as fp:
             self.cfg.write(fp)
 
         self.updateMeasuredValues()
@@ -301,7 +322,27 @@ class PGLoop(object):
         self.WORLDSCALE = 1.0
         self.measureLines = []
         self.calibLines = []
+        self.grid = []
 
+    def makeGrid(self, _surface, _distance):
+        grid = []
+        width = self.args.screen.get_width()
+        height = self.args.screen.get_height()
+        # X axis
+        pos = 0
+        for lineOrigX in range(1, int(height/_distance) + 3):
+            curX = int(lineOrigX/self.WORLDSCALE)
+            o = PGObject(pygame.draw.line, _surface, ((128, 128, 128), (curX, 0), (curX, height), 1), True)
+            grid.append(o)
+
+        # Y axis
+        pos = 0
+        for lineOrigY in range(1, int(width/_distance)):
+            curY = int(lineOrigY/self.WORLDSCALE)
+            o = PGObject(pygame.draw.line, _surface, ((128, 128, 128), (0, curY), (width, curY), 1), True)
+            grid.append(o)
+
+        return grid
 
 
 def vectorAdd(_a, _b):
@@ -356,6 +397,7 @@ def makeParser():
     SHIFT + left mouse button draws measuring line.
     DEL deletes measured values.
     CTRL + DEL deletes calibration (including measured values).
+    g displays/hides grid.
     ESC exits.
 
     Please start this program from command line!''', add_help=False)
@@ -364,8 +406,8 @@ def makeParser():
     argparser.add_argument('-m', '--flipHorizontal', action='store_true', help='Flip video horizontal')
     argparser.add_argument('-v', '--flipVertical', action='store_true', help='Flip video vertical')
     argparser.add_argument('-d', '--device', nargs = '?', default='/dev/video0', help='Name of the camera device')
-    argparser.add_argument('-w', '--width', nargs = '?', type=int, default=176, help='Width of view')
-    argparser.add_argument('-h', '--height', nargs = '?', type=int, default=144, help='Height of view')
+    argparser.add_argument('-w', '--width', nargs = '?', type=int, default=640, help='Width of view')
+    argparser.add_argument('-h', '--height', nargs = '?', type=int, default=480, help='Height of view')
     argparser.add_argument('-?', '--help', action='store_true', help='Print usage information')
 
     return argparser
@@ -408,6 +450,7 @@ def main(_args):
         cfg.add_section('MEASURING')
     if not cfg.has_option('MEASURING', 'worldscale'):
         cfg.set('MEASURING', 'worldscale', 1.0)
+    print('current scale:', cfg.getfloat('MEASURING', 'worldscale'))
     # TODO: handle options for screen resolution, camera resolution, ...
 
     loop = PGLoop(args, cfg)
