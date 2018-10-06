@@ -392,9 +392,9 @@ def initPygame(_windowSize=(640, 480)):
 def makeParser():
     argparser = argparse.ArgumentParser(description='''Display camera video with pygame (>= 1.9).
     Left mouse button + mouse motion drags video.
-    Right mouse button takes screenshots, CTRL + right mouse button saves with drawn lines.
+    Right mouse button takes screenshot, CTRL + right mouse button saves screenshot with drawn lines.
     CTRL + left mouse button + mouse motion draws calibration line.
-    SHIFT + left mouse button draws measuring line.
+    SHIFT + left mouse button + mouse motion draws measuring line.
     DEL deletes measured values.
     CTRL + DEL deletes calibration (including measured values).
     g displays/hides grid.
