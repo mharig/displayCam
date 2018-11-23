@@ -19,12 +19,20 @@ measuring line. DEL deletes measured values. CTRL + DEL deletes calibration
 this program from command line!
 
 optional arguments:
+
   -l, --list            Print avaiable video devices
+
   -s, --scale           Scale video (default), otherwise it is displayed 1:1 and may be
                         dragged with the mouse.
+
   -m, --flipHorizontal  Flip video horizontal
+
   -v, --flipVertical    Flip video vertical
+
   -d [DEVICE], --device [DEVICE]  Name of the camera device. Default is /dev/video0
+
   -w [WIDTH], --width [WIDTH]     Width of view
+
   -h [HEIGHT], --height [HEIGHT]  Height of view
+
   -?, --help            Print usage information
