@@ -6,7 +6,8 @@ When you mark distances with SHIFT+left mouse button the length is displayed on 
 So you should start displayCam.py from command line, if you want to use this feature!
 
 
-usage: displaycam.py [-l] [-s] [-m] [-v] [-d [DEVICE]] [-w [WIDTH]]
+usage:
+displaycam.py [-l] [-s] [-m] [-v] [-d [DEVICE]] [-w [WIDTH]]
                      [-h [HEIGHT]] [-?]
 
 Display camera video with pygame (>= 1.9). Left mouse button + mouse motion
@@ -23,10 +24,7 @@ optional arguments:
                         dragged with the mouse.
   -m, --flipHorizontal  Flip video horizontal
   -v, --flipVertical    Flip video vertical
-  -d [DEVICE], --device [DEVICE]
-                        Name of the camera device. Default is /dev/video0
-  -w [WIDTH], --width [WIDTH]
-                        Width of view
-  -h [HEIGHT], --height [HEIGHT]
-                        Height of view
+  -d [DEVICE], --device [DEVICE]  Name of the camera device. Default is /dev/video0
+  -w [WIDTH], --width [WIDTH]     Width of view
+  -h [HEIGHT], --height [HEIGHT]  Height of view
   -?, --help            Print usage information
